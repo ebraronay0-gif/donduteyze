@@ -1,23 +1,28 @@
-name: Build Döndü Teyze Android APK
+name: Döndü Teyze Android APK
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: GitHub reposunu indir
+      - name: GitHub deposunu indir
         uses: actions/checkout@v4
 
       - name: Node.js 20 kur
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package.json
 
       - name: Java 17 kur
         uses: actions/setup-java@v4
@@ -28,6 +33,36 @@ jobs:
       - name: Android SDK kur
         uses: android-actions/setup-android@v3
 
+      - name: Proje ZIP dosyasını bul ve aç
+        shell: bash
+        run: |
+          set -e
+
+          ZIP_FILE=$(find . -maxdepth 1 -type f -name "*.zip" | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "HATA: Proje ZIP dosyası bulunamadı."
+            exit 1
+          fi
+
+          echo "ZIP bulundu: $ZIP_FILE"
+
+          mkdir -p /tmp/project
+          unzip -q "$ZIP_FILE" -d /tmp/project
+
+          echo "ZIP içeriği:"
+          find /tmp/project -maxdepth 2 -type f | head -100
+
+          if [ ! -f "/tmp/project/package.json" ]; then
+            echo "HATA: ZIP içinde package.json bulunamadı."
+            exit 1
+          fi
+
+          cp -a /tmp/project/. .
+
+          echo "package.json bulundu:"
+          ls -la package.json
+
       - name: NPM paketlerini kur
         run: npm install
 
@@ -35,9 +70,12 @@ jobs:
         run: npm run build
 
       - name: Capacitor Android platformunu ekle
+        shell: bash
         run: |
           if [ ! -d "android" ]; then
             npx cap add android
+          else
+            echo "Android platformu zaten mevcut."
           fi
 
       - name: Capacitor Android senkronizasyonu
@@ -45,6 +83,7 @@ jobs:
 
       - name: Android APK oluştur
         working-directory: android
+        shell: bash
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug
@@ -54,3 +93,4 @@ jobs:
         with:
           name: donduteyze-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
