@@ -3,9 +3,6 @@ name: Android APK Oluştur
 on:
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -18,12 +15,12 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
       - name: Node.js 20 kur
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Android SDK kur
         uses: android-actions/setup-android@v3
@@ -33,53 +30,61 @@ jobs:
         run: |
           set -e
 
-          ZIP=$(find . -maxdepth 2 -type f -name "*.zip" | head -n 1)
+          ZIP=$(find "$GITHUB_WORKSPACE" -maxdepth 3 -type f -name "*.zip" | head -n 1)
 
           if [ -z "$ZIP" ]; then
-            echo "HATA: ZIP dosyası bulunamadı."
+            echo "HATA: ZIP dosyası bulunamadı!"
             exit 1
           fi
 
           echo "ZIP bulundu: $ZIP"
 
-          mkdir -p extracted
-          unzip -o "$ZIP" -d extracted
+          mkdir -p "$GITHUB_WORKSPACE/extracted"
+
+          unzip -o "$ZIP" -d "$GITHUB_WORKSPACE/extracted"
 
           PROJECT_DIR=$(find "$GITHUB_WORKSPACE/extracted" \
             -type f \
             -name "package.json" \
-            -print \
-            -quit)
+            -not -path "*/node_modules/*" \
+            -print -quit | xargs -r dirname)
 
           if [ -z "$PROJECT_DIR" ]; then
-            echo "HATA: package.json bulunamadı."
-            find "$GITHUB_WORKSPACE/extracted" -maxdepth 3 -type f | head -50
+            echo "HATA: package.json bulunamadı!"
+            find "$GITHUB_WORKSPACE/extracted" -maxdepth 4 -type f | head -100
             exit 1
           fi
 
-          PROJECT_DIR=$(dirname "$PROJECT_DIR")
-
           echo "Proje klasörü: $PROJECT_DIR"
+
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: NPM paketlerini kur
         shell: bash
         run: |
           set -e
+
           cd "$PROJECT_DIR"
+
+          echo "package.json:"
+          cat package.json
+
           npm install
 
       - name: Web uygulamasını oluştur
         shell: bash
         run: |
           set -e
+
           cd "$PROJECT_DIR"
+
           npm run build
 
-      - name: Capacitor Android ekle
+      - name: Capacitor Android platformunu ekle
         shell: bash
         run: |
           set -e
+
           cd "$PROJECT_DIR"
 
           if [ ! -d "android" ]; then
@@ -92,72 +97,16 @@ jobs:
         shell: bash
         run: |
           set -e
+
           cd "$PROJECT_DIR"
+
           npx cap sync android
 
       - name: AdMob App ID ekle
         shell: bash
         run: |
           set -e
+
           cd "$PROJECT_DIR"
 
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-
-          if [ ! -f "$MANIFEST" ]; then
-            echo "HATA: AndroidManifest.xml bulunamadı."
-            exit 1
-          fi
-
-          python3 - <<'PY'
-          from pathlib import Path
-
-          manifest = Path("android/app/src/main/AndroidManifest.xml")
-          text = manifest.read_text()
-
-          app_id = "ca-app-pub-3940256099942544~3347511713"
-
-          if "com.google.android.gms.ads.APPLICATION_ID" in text:
-              print("AdMob App ID zaten mevcut.")
-          else:
-              application_pos = text.find("<application")
-
-              if application_pos == -1:
-                  raise SystemExit("HATA: <application> etiketi bulunamadı.")
-
-              application_end = text.find(">", application_pos)
-
-              if application_end == -1:
-                  raise SystemExit("HATA: <application> etiketi bozuk.")
-
-              meta = (
-                  "\n        <meta-data\n"
-                  "            android:name=\"com.google.android.gms.ads.APPLICATION_ID\"\n"
-                  f"            android:value=\"{app_id}\" />"
-              )
-
-              text = (
-                  text[:application_end + 1]
-                  + meta
-                  + text[application_end + 1:]
-              )
-
-              manifest.write_text(text)
-              print("AdMob test App ID eklendi.")
-          PY
-
-      - name: Android APK oluştur
-        shell: bash
-        run: |
-          set -e
-          cd "$PROJECT_DIR/android"
-
-          chmod +x gradlew
-
-          ./gradlew assembleDebug --no-daemon
-
-      - name: APK dosyasını yükle
-        uses: actions/upload-artifact@v4
-        with:
-          name: donduteyze-apk
-          path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          MANIFEST="android/app/src/main/AndroidManifest
