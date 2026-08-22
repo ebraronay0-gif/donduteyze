@@ -1,4 +1,4 @@
-name: Android APK Oluştur
+name: Dön­dü Teyze Android APK
 
 on:
   workflow_dispatch:
@@ -11,107 +11,74 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: GitHub deposunu indir
+      - name: GitHub reposunu indir
         uses: actions/checkout@v4
 
       - name: Node.js 20 kur
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: ''
+          cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Java 17 kur
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: 17
 
       - name: Android SDK kur
         uses: android-actions/setup-android@v3
 
-      - name: Proje ZIP dosyasını bul ve aç
-        shell: bash
-        run: |
-          set -e
-
-          ZIP_FILE=$(find . -maxdepth 2 -type f -name "*.zip" | head -n 1)
-
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ZIP dosyası bulunamadı!"
-            exit 1
-          fi
-
-          echo "ZIP bulundu: $ZIP_FILE"
-
-          mkdir -p project
-          unzip -q "$ZIP_FILE" -d project
-
-          echo "ZIP açıldı:"
-          find project -maxdepth 3 -type f | head -100
-
-      - name: Proje klasörünü bul
-        shell: bash
-        run: |
-          set -e
-
-          PACKAGE_JSON=$(find project -type f -name "package.json" | head -n 1)
-
-          if [ -z "$PACKAGE_JSON" ]; then
-            echo "package.json bulunamadı!"
-            find project -maxdepth 4 -type f
-            exit 1
-          fi
-
-          PROJECT_DIR=$(dirname "$PACKAGE_JSON")
-
-          echo "Proje klasörü: $PROJECT_DIR"
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
       - name: NPM paketlerini kur
-        shell: bash
-        run: |
-          set -e
-          cd "$PROJECT_DIR"
-          npm install
+        run: npm install
 
       - name: Web uygulamasını oluştur
-        shell: bash
-        run: |
-          set -e
-          cd "$PROJECT_DIR"
-          npm run build
+        run: npm run build
 
       - name: Capacitor Android platformunu ekle
         shell: bash
         run: |
-          set -e
-          cd "$PROJECT_DIR"
-
           if [ ! -d "android" ]; then
             npx cap add android
-          else
-            echo "Android platformu zaten mevcut."
           fi
 
-      - name: Capacitor Android senkronizasyonu
+      - name: AdMob App ID ekle
         shell: bash
         run: |
-          set -e
-          cd "$PROJECT_DIR"
-          npx cap sync android
+          python3 - <<'PY'
+          path = "android/app/src/main/AndroidManifest.xml"
+
+          with open(path, "r", encoding="utf-8") as f:
+              text = f.read()
+
+          admob = '''
+              <meta-data
+                  android:name="com.google.android.gms.ads.APPLICATION_ID"
+                  android:value="ca-app-pub-3940256099942544~3347511713" />
+          '''
+
+          if "com.google.android.gms.ads.APPLICATION_ID" not in text:
+              text = text.replace(
+                  "</application>",
+                  admob + "\n    </application>"
+              )
+
+          with open(path, "w", encoding="utf-8") as f:
+              f.write(text)
+          PY
+
+      - name: Capacitor Android senkronizasyonu
+        run: npx cap sync android
 
       - name: Android APK oluştur
-        shell: bash
+        working-directory: android
         run: |
-          set -e
-          cd "$PROJECT_DIR/android"
-
           chmod +x gradlew
           ./gradlew assembleDebug
 
       - name: APK dosyasını yükle
         uses: actions/upload-artifact@v4
         with:
-          name: Donduteyze-Android-APK
-          path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          name: dondu-teyze-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
