@@ -14,34 +14,11 @@ jobs:
       - name: GitHub reposunu indir
         uses: actions/checkout@v4
 
-      - name: ZIP dosyasını bul ve aç
-        shell: bash
-        run: |
-          ZIP_FILE=$(find . -maxdepth 2 -type f -name "*.zip" | head -n 1)
-
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ZIP dosyası bulunamadı."
-            exit 1
-          fi
-
-          echo "Bulunan ZIP: $ZIP_FILE"
-
-          mkdir -p extracted
-          unzip -o "$ZIP_FILE" -d extracted
-
-          shopt -s dotglob
-          ITEMS=(extracted/*)
-
-          if [ ${#ITEMS[@]} -eq 1 ] && [ -d "${ITEMS[0]}" ]; then
-            cp -R "${ITEMS[0]}"/. .
-          else
-            cp -R extracted/. .
-          fi
-
       - name: Node.js 20 kur
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
 
       - name: Java 17 kur
         uses: actions/setup-java@v4
@@ -59,12 +36,9 @@ jobs:
         run: npm run build
 
       - name: Capacitor Android platformunu ekle
-        shell: bash
         run: |
           if [ ! -d "android" ]; then
             npx cap add android
-          else
-            echo "Android platformu zaten mevcut."
           fi
 
       - name: Capacitor Android senkronizasyonu
@@ -79,5 +53,5 @@ jobs:
       - name: APK dosyasını yükle
         uses: actions/upload-artifact@v4
         with:
-          name: dondutezyze-debug-apk
+          name: donduteyze-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
