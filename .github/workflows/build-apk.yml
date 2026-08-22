@@ -11,8 +11,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: GitHub deposunu indir
+      - name: GitHub reposunu indir
         uses: actions/checkout@v4
+
+      - name: Node.js 20 kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
 
       - name: Java 17 kur
         uses: actions/setup-java@v4
@@ -23,67 +29,50 @@ jobs:
       - name: Android SDK kur
         uses: android-actions/setup-android@v3
 
-      - name: ZIP dosyasını bul
+      - name: ZIP dosyasını bul ve aç
         shell: bash
         run: |
           ZIP_FILE=$(find . -maxdepth 2 -type f -name "*.zip" | head -n 1)
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "HATA: ZIP dosyası bulunamadı."
+            echo "ZIP dosyası bulunamadı."
             exit 1
           fi
 
-          echo "ZIP bulundu: $ZIP_FILE"
-          echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
+          echo "Bulunan ZIP: $ZIP_FILE"
 
-      - name: ZIP dosyasını aç
-        shell: bash
-        run: |
-          rm -rf project
-          mkdir project
-          unzip -q "$ZIP_FILE" -d project
+          mkdir -p extracted
+          unzip -o "$ZIP_FILE" -d extracted
 
-      - name: Proje klasörünü bul
-        shell: bash
-        run: |
-          PROJECT_DIR=$(find project -type f -name "package.json" \
-            -not -path "*/node_modules/*" \
-            -print -quit | xargs -r dirname)
+          shopt -s dotglob
+          ITEMS=(extracted/*)
 
-          if [ -z "$PROJECT_DIR" ]; then
-            echo "HATA: package.json bulunamadı."
-            exit 1
+          if [ ${#ITEMS[@]} -eq 1 ] && [ -d "${ITEMS[0]}" ]; then
+            cp -R "${ITEMS[0]}"/. .
+          else
+            cp -R extracted/. .
           fi
-
-          echo "Proje klasörü: $PROJECT_DIR"
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
-      - name: Node.js 20 kur
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
 
       - name: NPM paketlerini kur
-        working-directory: ${{ env.PROJECT_DIR }}
-        shell: bash
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+        run: npm install
 
       - name: Web uygulamasını oluştur
-        working-directory: ${{ env.PROJECT_DIR }}
         run: npm run build
 
+      - name: Capacitor Android platformunu ekle
+        shell: bash
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          else
+            echo "Android platformu zaten mevcut."
+          fi
+
       - name: Capacitor Android senkronizasyonu
-        working-directory: ${{ env.PROJECT_DIR }}
         run: npx cap sync android
 
       - name: Android APK oluştur
-        working-directory: ${{ env.PROJECT_DIR }}/android
-        shell: bash
+        working-directory: android
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug
@@ -91,6 +80,5 @@ jobs:
       - name: APK dosyasını GitHub'a yükle
         uses: actions/upload-artifact@v4
         with:
-          name: donduteyze-test-apk
-          path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          name: dondutezyze-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
