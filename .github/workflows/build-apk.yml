@@ -1,0 +1,84 @@
+name: Build Döndü Teyze Android APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: GitHub reposunu indir
+        uses: actions/checkout@v4
+
+      - name: Java 17 kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK kur
+        uses: android-actions/setup-android@v3
+
+      - name: ZIP dosyasını bul ve aç
+        shell: bash
+        run: |
+          ZIP_FILE=$(find . -maxdepth 2 -type f -name "*.zip" | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ZIP dosyası bulunamadı."
+            exit 1
+          fi
+
+          echo "Bulunan ZIP: $ZIP_FILE"
+
+          mkdir -p project
+          unzip -q "$ZIP_FILE" -d project
+
+      - name: Proje klasörünü bul
+        shell: bash
+        run: |
+          PROJECT_DIR=$(find project -name package.json -not -path "*/node_modules/*" -print -quit | xargs dirname)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "package.json bulunamadı."
+            exit 1
+          fi
+
+          echo "Proje: $PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+
+      - name: Node.js 20 kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache-dependency-path: ${{ env.PROJECT_DIR }}/package-lock.json
+
+      - name: NPM bağımlılıklarını kur
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Web uygulamasını build et
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: npm run build
+
+      - name: Capacitor Android senkronizasyonu
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: npx cap sync android
+
+      - name: Android APK oluştur
+        working-directory: ${{ env.PROJECT_DIR }}/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: APK'yı yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: donduteyze-test-apk
+          path: ${{ env.PROJECT_DIR }}/android/app/build/outputs/apk/debug/app-debug.apk
