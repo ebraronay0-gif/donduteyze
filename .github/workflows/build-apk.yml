@@ -46,7 +46,7 @@ jobs:
             -type f -name "package.json" \
             -print -quit | xargs dirname)
 
-          if [ -z "$PROJECT_DIR" ] || [ "$PROJECT_DIR" = "." ]; then
+          if [ -z "$PROJECT_DIR" ]; then
             echo "package.json bulunamadı!"
             exit 1
           fi
@@ -59,7 +59,6 @@ jobs:
         run: |
           set -e
           cd "$PROJECT_DIR"
-
           npm install
 
       - name: Web uygulamasını oluştur
@@ -67,7 +66,6 @@ jobs:
         run: |
           set -e
           cd "$PROJECT_DIR"
-
           npm run build
 
       - name: Capacitor Android platformunu ekle
@@ -85,7 +83,6 @@ jobs:
         run: |
           set -e
           cd "$PROJECT_DIR"
-
           npx cap sync android
 
       - name: AdMob App ID ekle
@@ -96,12 +93,34 @@ jobs:
 
           MANIFEST="android/app/src/main/AndroidManifest.xml"
 
-          if ! grep -q "com.google.android.gms.ads.APPLICATION_ID" "$MANIFEST"; then
-            sed -i '/<application/i\
-    <meta-data\
-        android:name="com.google.android.gms.ads.APPLICATION_ID"\
-        android:value="ca-app-pub-3940256099942544~3347511713" />' "$MANIFEST"
-          fi
+          python3 <<'PY'
+          from pathlib import Path
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          text = manifest.read_text()
+
+          app_id = "ca-app-pub-3940256099942544~3347511713"
+          meta = f'''
+              <meta-data
+                  android:name="com.google.android.gms.ads.APPLICATION_ID"
+                  android:value="{app_id}" />'''
+
+          if "com.google.android.gms.ads.APPLICATION_ID" not in text:
+              start = text.find("<application")
+              if start == -1:
+                  raise SystemExit("AndroidManifest.xml içinde application bulunamadı!")
+
+              end = text.find(">", start)
+              if end == -1:
+                  raise SystemExit("application etiketi bulunamadı!")
+
+              text = text[:end + 1] + meta + text[end + 1:]
+              manifest.write_text(text)
+
+              print("AdMob App ID eklendi.")
+          else:
+              print("AdMob App ID zaten mevcut.")
+          PY
 
       - name: Android APK oluştur
         shell: bash
