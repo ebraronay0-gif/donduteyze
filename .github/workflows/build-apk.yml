@@ -14,21 +14,6 @@ jobs:
       - name: GitHub reposunu indir
         uses: actions/checkout@v4
 
-      - name: Node.js 20 kur
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-
-      - name: Java 17 kur
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Android SDK kur
-        uses: android-actions/setup-android@v3
-
       - name: ZIP dosyasını bul ve aç
         shell: bash
         run: |
@@ -52,6 +37,20 @@ jobs:
           else
             cp -R extracted/. .
           fi
+
+      - name: Node.js 20 kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Java 17 kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK kur
+        uses: android-actions/setup-android@v3
 
       - name: NPM paketlerini kur
         run: npm install
@@ -77,7 +76,7 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: APK dosyasını GitHub'a yükle
+      - name: APK dosyasını yükle
         uses: actions/upload-artifact@v4
         with:
           name: dondutezyze-debug-apk
